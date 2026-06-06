@@ -63,6 +63,7 @@ http://127.0.0.1:8787
 ```
 
 The Web app can use `.env`, or you can choose temporary key input in the UI. Temporary keys are passed only through the child process environment.
+Advanced settings include TTS concurrency. The default is 3 parallel Mimo TTS workers, which is usually faster than serial synthesis without being too aggressive on API rate limits.
 
 ## Run The CLI
 
@@ -89,6 +90,7 @@ python3 scripts/mimo_dub_wizard.py
 - YouTube subtitles are used before Mimo ASR when timed captions are available.
 - The classifier uses title, description, metadata, and subtitle preview to choose single-speaker vs two-speaker mode.
 - Long single-speaker TTS text is split into shorter Mimo TTS calls before concatenation to avoid whole-chunk voice clone failures.
+- TTS synthesis runs concurrently by default with 3 workers. Use `--tts-workers N` in the CLI or `TTS 并发` in the Web app to tune it.
 - Chinese sidecar subtitles are generated from `segments.zh.json` as `output/chinese_subtitles.srt` and `output/chinese_subtitles.vtt`.
 
 ## Test

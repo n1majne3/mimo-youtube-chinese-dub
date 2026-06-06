@@ -163,6 +163,7 @@ Produce a Chinese dubbed version of a YouTube video by preparing media locally, 
        --pause-duration 0.2 \
        --max-turn-tail-silence 0.4 \
        --min-atempo-factor 0.55 \
+       --tts-workers 3 \
        >> work/mimo-dub-job/run.log 2>&1
      code=$?
      echo "$code" > work/mimo-dub-job/run.exit
@@ -216,6 +217,7 @@ The official documentation entry point is `https://platform.xiaomimimo.com/llms.
 - When usable subtitles are available, the wizard writes `asr/*.txt` from subtitle cues and records `metadata/subtitle_asr_manifest.json`; this skips Mimo ASR for those chunks.
 - The local Web app derives Chinese sidecar subtitles from `segments.zh.json` and writes `output/chinese_subtitles.srt` plus `output/chinese_subtitles.vtt`; the VTT file is attached to the browser video preview.
 - `scripts/full_mimo_dub.py` automatically splits long single-speaker Chinese TTS text into shorter Mimo TTS calls before concatenation. This avoids whole-chunk voice clone failures where a 60-second generation can collapse into repeated filler sounds such as "咦".
+- Single-speaker and two-speaker TTS synthesis use `--tts-workers`, defaulting to 3 concurrent Mimo TTS workers. Tune this down for rate limits or up cautiously for faster jobs. The Web app exposes the same setting as `TTS 并发`.
 - Use `scripts/youtube_dub_pipeline.py check` to inspect local `yt-dlp`, `ffmpeg`, and `ffprobe` availability.
 - Store token-plan credentials in `.env` as `MIMO_TOKEN_PLAN_API_KEY=...` and pay-as-you-go credentials as `MIMO_API_KEY=...`.
 - The local Web app infers `.env` API type from the variable name. If the user enters a temporary key in the Web app, they must choose `Token Plan` or `按量 API`; temporary keys must not be written to job metadata, logs, or command-line arguments.

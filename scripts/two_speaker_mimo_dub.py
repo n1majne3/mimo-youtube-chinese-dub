@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import os
 import re
@@ -175,6 +176,48 @@ def fit_turn(input_wav: Path, output_wav: Path, target_duration: float, args: ar
     )
 
 
+def synthesize_and_fit_turn(
+    cid: str,
+    turn_index: int,
+    turn: dict[str, str],
+    turn_duration: float,
+    job_dir: Path,
+    args: argparse.Namespace,
+    *,
+    api_key: str,
+    api_base_url: str,
+    voice_samples: dict[str, str],
+) -> tuple[int, Path, dict[str, Any]]:
+    speaker = turn["speaker"]
+    turn_id = f"{cid}_{turn_index:02d}_{speaker}"
+    tts_wav = job_dir / "tts" / f"{turn_id}.wav"
+    fit_wav = job_dir / "fit_turns" / f"{turn_id}.wav"
+    print(f"  [{turn_id}] TTS start", flush=True)
+    synthesize_turn(
+        turn["text_zh"],
+        speaker,
+        job_dir / "raw" / "tts" / f"{turn_id}.json",
+        tts_wav,
+        api_key=api_key,
+        base_url=api_base_url,
+        voice_samples=voice_samples,
+        voice_prompt=args.voice_prompt,
+    )
+    fit_turn(tts_wav, fit_wav, turn_duration, args)
+    print(f"  [{turn_id}] TTS+fit done", flush=True)
+    return (
+        turn_index,
+        fit_wav,
+        {
+            "speaker": speaker,
+            "text_zh": turn["text_zh"],
+            "target_duration": turn_duration,
+            "tts_duration": base.ffprobe_duration(tts_wav),
+            "fit_duration": base.ffprobe_duration(fit_wav),
+        },
+    )
+
+
 def process(args: argparse.Namespace) -> None:
     if args.env_file:
         base.load_env_file(Path(args.env_file).expanduser())
@@ -192,6 +235,8 @@ def process(args: argparse.Namespace) -> None:
         chunks = chunks[: args.max_chunks]
     print(f"Using Mimo base URL: {api_base_url}", flush=True)
     print(f"Job duration {job['duration']:.2f}s, chunks to process: {len(chunks)}", flush=True)
+    tts_workers = max(1, int(args.tts_workers))
+    print(f"TTS workers: {tts_workers}", flush=True)
 
     voice_samples = {}
     for speaker, sample_arg in {"host": args.host_voice_sample, "guest": args.guest_voice_sample}.items():
@@ -225,32 +270,46 @@ def process(args: argparse.Namespace) -> None:
         turn_durations = allocate_durations(turns, float(chunk["duration"]), args.pause_duration)
         chunk_parts: list[Path] = []
         turn_rows: list[dict[str, Any]] = []
-        for turn_index, (turn, turn_duration) in enumerate(zip(turns, turn_durations, strict=False), start=1):
-            speaker = turn["speaker"]
-            turn_id = f"{cid}_{turn_index:02d}_{speaker}"
-            tts_wav = job_dir / "tts" / f"{turn_id}.wav"
-            fit_wav = job_dir / "fit_turns" / f"{turn_id}.wav"
-            synthesize_turn(
-                turn["text_zh"],
-                speaker,
-                job_dir / "raw" / "tts" / f"{turn_id}.json",
-                tts_wav,
-                api_key=api_key,
-                base_url=api_base_url,
-                voice_samples=voice_samples,
-                voice_prompt=args.voice_prompt,
-            )
-            fit_turn(tts_wav, fit_wav, turn_duration, args)
+
+        turn_jobs = list(enumerate(zip(turns, turn_durations, strict=False), start=1))
+        worker_count = min(tts_workers, max(1, len(turn_jobs)))
+        if worker_count == 1:
+            results = [
+                synthesize_and_fit_turn(
+                    cid,
+                    turn_index,
+                    turn,
+                    turn_duration,
+                    job_dir,
+                    args,
+                    api_key=api_key,
+                    api_base_url=api_base_url,
+                    voice_samples=voice_samples,
+                )
+                for turn_index, (turn, turn_duration) in turn_jobs
+            ]
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+                futures = [
+                    executor.submit(
+                        synthesize_and_fit_turn,
+                        cid,
+                        turn_index,
+                        turn,
+                        turn_duration,
+                        job_dir,
+                        args,
+                        api_key=api_key,
+                        api_base_url=api_base_url,
+                        voice_samples=voice_samples,
+                    )
+                    for turn_index, (turn, turn_duration) in turn_jobs
+                ]
+                results = [future.result() for future in concurrent.futures.as_completed(futures)]
+
+        for turn_index, fit_wav, turn_row in sorted(results, key=lambda item: item[0]):
             chunk_parts.append(fit_wav)
-            turn_rows.append(
-                {
-                    "speaker": speaker,
-                    "text_zh": turn["text_zh"],
-                    "target_duration": turn_duration,
-                    "tts_duration": base.ffprobe_duration(tts_wav),
-                    "fit_duration": base.ffprobe_duration(fit_wav),
-                }
-            )
+            turn_rows.append(turn_row)
             if turn_index < len(turns) and args.pause_duration > 0:
                 pause_wav = job_dir / "fit_turns" / f"{cid}_{turn_index:02d}_pause.wav"
                 base.create_silence(pause_wav, args.pause_duration)
@@ -291,6 +350,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pause-duration", type=float, default=0.2)
     parser.add_argument("--max-turn-tail-silence", type=float, default=0.4)
     parser.add_argument("--min-atempo-factor", type=float, default=0.55)
+    parser.add_argument("--tts-workers", type=int, default=3, help="Concurrent TTS workers; default 3.")
     parser.add_argument(
         "--voice-prompt",
         default="使用参考音色克隆当前说话人。中文表达自然清晰，保持访谈语气，语速中等偏快，避免过度情绪化。",

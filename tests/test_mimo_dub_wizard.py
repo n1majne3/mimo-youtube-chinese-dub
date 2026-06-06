@@ -63,6 +63,8 @@ class WizardTests(unittest.TestCase):
         self.assertIn("--guest-voice-sample", command)
         self.assertIn("--max-turn-tail-silence", command)
         self.assertIn("--min-atempo-factor", command)
+        self.assertIn("--tts-workers", command)
+        self.assertEqual(command[command.index("--tts-workers") + 1], "3")
 
     def test_run_paths_are_inside_job_dir(self):
         wizard = load_wizard()

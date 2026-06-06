@@ -22,6 +22,13 @@ def load_full_mimo():
 
 
 class FullMimoDubTests(unittest.TestCase):
+    def test_parser_defaults_to_three_tts_workers(self):
+        module = load_full_mimo()
+
+        args = module.build_parser().parse_args(["--source-video", "source.mp4", "--job-dir", "job"])
+
+        self.assertEqual(args.tts_workers, 3)
+
     def test_build_job_adds_chunks_to_prepare_manifest(self):
         module = load_full_mimo()
         with tempfile.TemporaryDirectory() as tmp:

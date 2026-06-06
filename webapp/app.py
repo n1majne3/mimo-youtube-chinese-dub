@@ -287,6 +287,7 @@ def build_wizard_command(payload: dict[str, Any], *, dry_run: bool = False) -> l
         "--max-tail-silence": payload.get("max_tail_silence"),
         "--max-turn-tail-silence": payload.get("max_turn_tail_silence"),
         "--min-atempo-factor": payload.get("min_atempo_factor"),
+        "--tts-workers": payload.get("tts_workers"),
     }
     for flag, value in numeric_defaults.items():
         if value not in (None, ""):

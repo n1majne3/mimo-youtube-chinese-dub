@@ -55,6 +55,7 @@ class WizardConfig:
     max_tail_silence: float = 0.6
     max_turn_tail_silence: float = 0.4
     min_atempo_factor: float = 0.55
+    tts_workers: int = 3
     voice_strategy: str = "voice-clone"
     voice_sample: Path | None = None
     host_voice_sample: Path | None = None
@@ -697,6 +698,8 @@ def build_dub_command(config: WizardConfig) -> list[str]:
             f"{config.max_turn_tail_silence:g}",
             "--min-atempo-factor",
             f"{config.min_atempo_factor:g}",
+            "--tts-workers",
+            str(config.tts_workers),
             "--voice-prompt",
             config.voice_prompt,
         ]
@@ -721,6 +724,8 @@ def build_dub_command(config: WizardConfig) -> list[str]:
         f"{config.max_tail_silence:g}",
         "--min-atempo-factor",
         f"{config.min_atempo_factor:g}",
+        "--tts-workers",
+        str(config.tts_workers),
         "--voice-strategy",
         config.voice_strategy,
         "--voice-prompt",
@@ -905,6 +910,7 @@ def config_from_args(args: argparse.Namespace) -> WizardConfig:
         max_tail_silence=args.max_tail_silence,
         max_turn_tail_silence=args.max_turn_tail_silence,
         min_atempo_factor=args.min_atempo_factor,
+        tts_workers=args.tts_workers,
         voice_strategy=voice_strategy,
         source_video=Path(args.source_video).expanduser() if args.source_video else None,
         output=Path(args.output).expanduser() if args.output else None,
@@ -970,6 +976,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-tail-silence", type=float, default=0.6)
     parser.add_argument("--max-turn-tail-silence", type=float, default=0.4)
     parser.add_argument("--min-atempo-factor", type=float, default=0.55)
+    parser.add_argument("--tts-workers", type=int, default=3)
     parser.add_argument("--voice-strategy", choices=["auto", "voice-clone", "voice-design"])
     parser.add_argument("--voice-sample")
     parser.add_argument("--host-voice-sample")

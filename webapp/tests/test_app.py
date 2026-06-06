@@ -20,6 +20,7 @@ class WebAppTests(unittest.TestCase):
             "url": "https://www.youtube.com/watch?v=abc&t=624s",
             "job_dir": "/tmp/mimo-web-job",
             "scope": "test",
+            "tts_workers": "3",
         }
 
         command = app.build_wizard_command(payload, dry_run=True)
@@ -29,6 +30,8 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("--content-type", command)
         self.assertIn("auto", command)
         self.assertIn("--mode", command)
+        self.assertIn("--tts-workers", command)
+        self.assertEqual(command[command.index("--tts-workers") + 1], "3")
         self.assertIn("--dry-run", command)
 
     def test_full_scope_omits_clip_options(self):

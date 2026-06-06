@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import concurrent.futures
 import json
 import math
 import os
@@ -738,6 +739,135 @@ def assemble(job_dir: Path, source_video: Path, chunks: list[dict[str, Any]], ou
     )
 
 
+def synthesize_and_fit_segment(
+    row: dict[str, Any],
+    chunk: dict[str, Any],
+    job_dir: Path,
+    args: argparse.Namespace,
+    *,
+    api_key: str | None,
+    base_url: str,
+    voice_sample_data_url: str | None,
+) -> dict[str, Any]:
+    cid = str(row["id"])
+    text_en = str(row.get("text_en") or "")
+    text_zh = str(row.get("text_zh") or "")
+    trans_text_path = job_dir / "zh" / f"{cid}.txt"
+    raw_tts_path = job_dir / "raw" / "tts" / f"{cid}.json"
+    raw_shorten_dir = job_dir / "raw" / "shorten"
+    tts_wav = job_dir / "tts" / f"{cid}.wav"
+    fit_wav = job_dir / "fit" / f"{cid}.wav"
+
+    if not args.no_api:
+        if not api_key:
+            raise SystemExit(f"{TOKEN_PLAN_API_KEY_ENV} is required in .env or the environment.")
+        print(f"  [{cid}] TTS start", flush=True)
+        synthesize_chunk(
+            text_zh,
+            raw_tts_path,
+            tts_wav,
+            api_key=api_key,
+            base_url=base_url,
+            voice_strategy=args.voice_strategy,
+            voice_prompt=args.voice_prompt,
+            voice_sample_data_url=voice_sample_data_url,
+        )
+        for retry in range(args.max_tts_expand_retries):
+            tts_duration = ffprobe_duration(tts_wav)
+            target_duration = float(chunk["duration"])
+            min_tts_duration = max(0.1, (target_duration - args.max_tail_silence) * args.min_atempo_factor)
+            if tts_duration >= min_tts_duration or not text_en:
+                break
+            expand_min_chars = max(
+                len(text_zh) + 60,
+                int(len(text_zh) * min_tts_duration / max(0.1, tts_duration) * 1.05),
+            )
+            expand_max_chars = max(expand_min_chars + 80, int(target_duration * args.target_chars_per_second))
+            print(
+                f"  [{cid}] TTS {tts_duration:.2f}s is too short for target {target_duration:.2f}s; "
+                f"expanding to {expand_min_chars}-{expand_max_chars} chars "
+                f"(retry {retry + 1}/{args.max_tts_expand_retries})",
+                flush=True,
+            )
+            text_zh = expand_translation(
+                text_en,
+                text_zh,
+                chunk,
+                raw_shorten_dir / f"{cid}_expand_{retry + 1}.json",
+                api_key=api_key,
+                base_url=base_url,
+                model=args.translate_model,
+                min_chars=expand_min_chars,
+                max_chars=expand_max_chars,
+            )
+            trans_text_path.write_text(text_zh + "\n", encoding="utf-8")
+            if tts_wav.exists():
+                tts_wav.unlink()
+            synthesize_chunk(
+                text_zh,
+                raw_tts_path,
+                tts_wav,
+                api_key=api_key,
+                base_url=base_url,
+                voice_strategy=args.voice_strategy,
+                voice_prompt=args.voice_prompt,
+                voice_sample_data_url=voice_sample_data_url,
+            )
+        for retry in range(args.max_tts_retries):
+            tts_duration = ffprobe_duration(tts_wav)
+            target_duration = float(chunk["duration"])
+            if tts_duration <= target_duration * 1.15:
+                break
+            new_max_chars = max(28, int(len(text_zh) * target_duration / tts_duration * 0.9))
+            print(
+                f"  [{cid}] TTS {tts_duration:.2f}s exceeds target {target_duration:.2f}s; "
+                f"shortening to {new_max_chars} chars (retry {retry + 1}/{args.max_tts_retries})",
+                flush=True,
+            )
+            text_zh = shorten_translation(
+                text_zh,
+                chunk,
+                raw_shorten_dir / f"{cid}_tts_{retry + 1}.json",
+                api_key=api_key,
+                base_url=base_url,
+                model=args.translate_model,
+                max_chars=new_max_chars,
+            )
+            trans_text_path.write_text(text_zh + "\n", encoding="utf-8")
+            if tts_wav.exists():
+                tts_wav.unlink()
+            synthesize_chunk(
+                text_zh,
+                raw_tts_path,
+                tts_wav,
+                api_key=api_key,
+                base_url=base_url,
+                voice_strategy=args.voice_strategy,
+                voice_prompt=args.voice_prompt,
+                voice_sample_data_url=voice_sample_data_url,
+            )
+
+    if not tts_wav.exists():
+        create_silence(tts_wav, 0.1)
+    fit_audio_to_chunk(
+        tts_wav,
+        fit_wav,
+        float(chunk["duration"]),
+        max_tail_silence=args.max_tail_silence,
+        min_atempo_factor=args.min_atempo_factor,
+    )
+    updated = dict(row)
+    updated.update(
+        {
+            "text_zh": text_zh,
+            "tts_duration": ffprobe_duration(tts_wav) if tts_wav.exists() else None,
+            "fit_duration": ffprobe_duration(fit_wav) if fit_wav.exists() else None,
+        }
+    )
+    print(f"  [{cid}] TTS+fit done", flush=True)
+    return updated
+
+
 def process(args: argparse.Namespace) -> None:
     if args.env_file:
         load_env_file(Path(args.env_file).expanduser())
@@ -766,8 +896,10 @@ def process(args: argparse.Namespace) -> None:
     print(f"Job duration {job['duration']:.2f}s, chunks to process: {len(chunks)}", flush=True)
 
     segment_rows: list[dict[str, Any]] = []
+    chunk_by_id: dict[str, dict[str, Any]] = {}
     for index, chunk in enumerate(chunks, start=1):
         cid = chunk["id"]
+        chunk_by_id[cid] = chunk
         print(f"\n=== Chunk {cid} ({index}/{len(chunks)}) {chunk['start']:.1f}-{chunk['end']:.1f}s ===", flush=True)
         chunk_wav = job_dir / "chunks" / f"{cid}.wav"
         extract_chunk(source, chunk, chunk_wav)
@@ -776,10 +908,7 @@ def process(args: argparse.Namespace) -> None:
         trans_text_path = job_dir / "zh" / f"{cid}.txt"
         raw_asr_path = job_dir / "raw" / "asr" / f"{cid}.json"
         raw_translate_path = job_dir / "raw" / "translate" / f"{cid}.json"
-        raw_tts_path = job_dir / "raw" / "tts" / f"{cid}.json"
         raw_shorten_dir = job_dir / "raw" / "shorten"
-        tts_wav = job_dir / "tts" / f"{cid}.wav"
-        fit_wav = job_dir / "fit" / f"{cid}.wav"
 
         if args.no_api:
             text_en = asr_text_path.read_text(encoding="utf-8").strip() if asr_text_path.exists() else ""
@@ -811,100 +940,6 @@ def process(args: argparse.Namespace) -> None:
                 )
                 trans_text_path.write_text(text_zh + "\n", encoding="utf-8")
             print(f"  ZH: {text_zh[:90]}", flush=True)
-            synthesize_chunk(
-                text_zh,
-                raw_tts_path,
-                tts_wav,
-                api_key=api_key,
-                base_url=base_url,
-                voice_strategy=args.voice_strategy,
-                voice_prompt=args.voice_prompt,
-                voice_sample_data_url=voice_sample_data_url,
-            )
-            for retry in range(args.max_tts_expand_retries):
-                tts_duration = ffprobe_duration(tts_wav)
-                target_duration = float(chunk["duration"])
-                min_tts_duration = max(0.1, (target_duration - args.max_tail_silence) * args.min_atempo_factor)
-                if tts_duration >= min_tts_duration or not text_en:
-                    break
-                expand_min_chars = max(
-                    len(text_zh) + 60,
-                    int(len(text_zh) * min_tts_duration / max(0.1, tts_duration) * 1.05),
-                )
-                expand_max_chars = max(expand_min_chars + 80, int(target_duration * args.target_chars_per_second))
-                print(
-                    f"  TTS {tts_duration:.2f}s is too short for target {target_duration:.2f}s; "
-                    f"expanding to {expand_min_chars}-{expand_max_chars} chars "
-                    f"(retry {retry + 1}/{args.max_tts_expand_retries})",
-                    flush=True,
-                )
-                text_zh = expand_translation(
-                    text_en,
-                    text_zh,
-                    chunk,
-                    raw_shorten_dir / f"{cid}_expand_{retry + 1}.json",
-                    api_key=api_key,
-                    base_url=base_url,
-                    model=args.translate_model,
-                    min_chars=expand_min_chars,
-                    max_chars=expand_max_chars,
-                )
-                trans_text_path.write_text(text_zh + "\n", encoding="utf-8")
-                if tts_wav.exists():
-                    tts_wav.unlink()
-                synthesize_chunk(
-                    text_zh,
-                    raw_tts_path,
-                    tts_wav,
-                    api_key=api_key,
-                    base_url=base_url,
-                    voice_strategy=args.voice_strategy,
-                    voice_prompt=args.voice_prompt,
-                    voice_sample_data_url=voice_sample_data_url,
-                )
-            for retry in range(args.max_tts_retries):
-                tts_duration = ffprobe_duration(tts_wav)
-                target_duration = float(chunk["duration"])
-                if tts_duration <= target_duration * 1.15:
-                    break
-                new_max_chars = max(28, int(len(text_zh) * target_duration / tts_duration * 0.9))
-                print(
-                    f"  TTS {tts_duration:.2f}s exceeds target {target_duration:.2f}s; "
-                    f"shortening to {new_max_chars} chars (retry {retry + 1}/{args.max_tts_retries})",
-                    flush=True,
-                )
-                text_zh = shorten_translation(
-                    text_zh,
-                    chunk,
-                    raw_shorten_dir / f"{cid}_tts_{retry + 1}.json",
-                    api_key=api_key,
-                    base_url=base_url,
-                    model=args.translate_model,
-                    max_chars=new_max_chars,
-                )
-                trans_text_path.write_text(text_zh + "\n", encoding="utf-8")
-                if tts_wav.exists():
-                    tts_wav.unlink()
-                synthesize_chunk(
-                    text_zh,
-                    raw_tts_path,
-                    tts_wav,
-                    api_key=api_key,
-                    base_url=base_url,
-                    voice_strategy=args.voice_strategy,
-                    voice_prompt=args.voice_prompt,
-                    voice_sample_data_url=voice_sample_data_url,
-                )
-
-        if not tts_wav.exists():
-            create_silence(tts_wav, 0.1)
-        fit_audio_to_chunk(
-            tts_wav,
-            fit_wav,
-            float(chunk["duration"]),
-            max_tail_silence=args.max_tail_silence,
-            min_atempo_factor=args.min_atempo_factor,
-        )
         segment_rows.append(
             {
                 "id": cid,
@@ -913,11 +948,53 @@ def process(args: argparse.Namespace) -> None:
                 "duration": chunk["duration"],
                 "text_en": text_en,
                 "text_zh": text_zh,
-                "tts_duration": ffprobe_duration(tts_wav) if tts_wav.exists() else None,
-                "fit_duration": ffprobe_duration(fit_wav) if fit_wav.exists() else None,
+                "tts_duration": None,
+                "fit_duration": None,
             }
         )
         write_segments(job_dir, segment_rows)
+
+    tts_workers = max(1, int(args.tts_workers))
+    worker_count = min(tts_workers, max(1, len(segment_rows)))
+    print(f"\nTTS workers: {worker_count}", flush=True)
+
+    def update_completed_row(row: dict[str, Any]) -> None:
+        for index, existing in enumerate(segment_rows):
+            if existing["id"] == row["id"]:
+                segment_rows[index] = row
+                break
+        write_segments(job_dir, segment_rows)
+
+    if worker_count == 1:
+        for row in segment_rows:
+            update_completed_row(
+                synthesize_and_fit_segment(
+                    row,
+                    chunk_by_id[str(row["id"])],
+                    job_dir,
+                    args,
+                    api_key=api_key,
+                    base_url=base_url,
+                    voice_sample_data_url=voice_sample_data_url,
+                )
+            )
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+            futures = {
+                executor.submit(
+                    synthesize_and_fit_segment,
+                    row,
+                    chunk_by_id[str(row["id"])],
+                    job_dir,
+                    args,
+                    api_key=api_key,
+                    base_url=base_url,
+                    voice_sample_data_url=voice_sample_data_url,
+                ): str(row["id"])
+                for row in segment_rows
+            }
+            for future in concurrent.futures.as_completed(futures):
+                update_completed_row(future.result())
 
     output = Path(args.output).expanduser().resolve() if args.output else job_dir / "output" / "full_chinese_dub.mp4"
     assemble(job_dir, source, chunks, output)
@@ -937,6 +1014,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--target-chars-per-second", type=float, default=10.0)
     parser.add_argument("--max-tail-silence", type=float, default=0.6)
     parser.add_argument("--min-atempo-factor", type=float, default=0.55)
+    parser.add_argument("--tts-workers", type=int, default=3, help="Concurrent TTS workers; default 3.")
     parser.add_argument("--max-tts-retries", type=int, default=2)
     parser.add_argument("--max-tts-expand-retries", type=int, default=1)
     parser.add_argument("--voice-strategy", default="voice-design", choices=["voice-design", "voice-clone"])
