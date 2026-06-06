@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mimo Dub Studio</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Mimo Dub Studio</p>
+            <h1>YouTube 中文配音任务台</h1>
+          </div>
+          <div class="system-pill" id="keyState">API key: checking</div>
+        </header>
+
+        <section class="control-grid">
+          <form class="panel form-panel" id="jobForm" autocomplete="off">
+            <div class="field wide">
+              <label for="url">YouTube URL</label>
+              <input id="url" name="url" type="url" required placeholder="https://www.youtube.com/watch?v=..." />
+            </div>
+
+            <fieldset class="segmented-field wide">
+              <legend>任务范围</legend>
+              <div class="segmented">
+                <label>
+                  <input id="scopeTest" name="scope" type="radio" value="test" checked />
+                  <span>测试片段</span>
+                </label>
+                <label>
+                  <input id="scopeFull" name="scope" type="radio" value="full" />
+                  <span>完整视频</span>
+                </label>
+                <label>
+                  <input id="scopeCustom" name="scope" type="radio" value="custom" />
+                  <span>自定义片段</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="segmented-field span-2">
+              <legend>API 来源</legend>
+              <div class="segmented two-up">
+                <label>
+                  <input id="apiSourceEnv" name="api_key_source" type="radio" value="env" checked />
+                  <span>.env</span>
+                </label>
+                <label>
+                  <input id="apiSourceManual" name="api_key_source" type="radio" value="manual" />
+                  <span>临时输入/覆盖</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <div class="field" data-api-panel="manual">
+              <label for="apiProfile">API 类型</label>
+              <select id="apiProfile" name="api_profile">
+                <option value="token_plan">Token Plan</option>
+                <option value="payg">按量 API</option>
+              </select>
+            </div>
+
+            <div class="field" data-api-panel="manual">
+              <label for="apiKey">API key</label>
+              <input id="apiKey" name="api_key" type="password" autocomplete="off" placeholder="不会保存" />
+            </div>
+
+            <div class="field span-2" data-scope-panel="clip">
+              <label for="clipStart">片段开始</label>
+              <input id="clipStart" name="clip_start" type="text" placeholder="自动读取 URL t=" />
+            </div>
+
+            <div class="field span-2" data-scope-panel="clip">
+              <label for="clipDuration">片段时长</label>
+              <input id="clipDuration" name="clip_duration" type="text" value="120s" />
+            </div>
+
+            <label class="checkline" data-voice-panel="clone-consent">
+              <input id="consent" name="voice_clone_confirmed" type="checkbox" />
+              <span>确认有权使用声线</span>
+            </label>
+
+            <label class="checkline">
+              <input id="dryRun" name="dry_run" type="checkbox" />
+              <span>仅演练</span>
+            </label>
+
+            <div class="actions span-2">
+              <button class="secondary" type="button" id="analyzeBtn">分析</button>
+              <button type="submit" id="startBtn">开始</button>
+            </div>
+
+            <details class="advanced-block wide" id="advancedSettings">
+              <summary>高级设置</summary>
+              <div class="advanced-grid">
+                <div class="field wide">
+                  <label for="jobDir">任务目录</label>
+                  <input id="jobDir" name="job_dir" type="text" placeholder="留空自动生成" />
+                </div>
+
+                <div class="section-title wide">内容判断</div>
+
+                <div class="field">
+                  <label for="contentType">内容类型</label>
+                  <select id="contentType" name="content_type">
+                    <option value="auto">自动判断</option>
+                    <option value="solo">单人讲解</option>
+                    <option value="interview">访谈</option>
+                    <option value="narration">旁白</option>
+                    <option value="multi-speaker">多人内容</option>
+                    <option value="music">音乐</option>
+                    <option value="unknown">不确定</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label for="mode">说话人模式</label>
+                  <select id="mode" name="mode">
+                    <option value="auto">自动判断</option>
+                    <option value="single">单人</option>
+                    <option value="two-speaker">双人</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label for="voiceStrategy">声线策略</label>
+                  <select id="voiceStrategy" name="voice_strategy">
+                    <option value="auto">自动判断</option>
+                    <option value="voice-clone">声音克隆</option>
+                    <option value="voice-design">声音设计</option>
+                  </select>
+                </div>
+
+                <div class="section-title wide">声线</div>
+
+                <div class="field" data-voice-panel="single-clone">
+                  <label for="sampleStart">采样开始</label>
+                  <input id="sampleStart" name="voice_sample_start" type="text" value="70s" />
+                </div>
+
+                <div class="field span-2" data-voice-panel="single-clone">
+                  <label for="voiceSample">采样文件</label>
+                  <input id="voiceSample" name="voice_sample" type="text" placeholder="留空从视频截取" />
+                </div>
+
+                <div class="field" data-voice-panel="two-speaker">
+                  <label for="hostSampleStart">主持采样</label>
+                  <input id="hostSampleStart" name="host_sample_start" type="text" value="70s" />
+                </div>
+
+                <div class="field" data-voice-panel="two-speaker">
+                  <label for="guestSampleStart">嘉宾采样</label>
+                  <input id="guestSampleStart" name="guest_sample_start" type="text" value="245s" />
+                </div>
+
+                <div class="field span-2" data-voice-panel="two-speaker">
+                  <label for="hostVoiceSample">主持采样文件</label>
+                  <input id="hostVoiceSample" name="host_voice_sample" type="text" placeholder="留空从视频截取" />
+                </div>
+
+                <div class="field span-2" data-voice-panel="two-speaker">
+                  <label for="guestVoiceSample">嘉宾采样文件</label>
+                  <input id="guestVoiceSample" name="guest_voice_sample" type="text" placeholder="留空从视频截取" />
+                </div>
+
+                <div class="field wide">
+                  <label for="voicePrompt">声线描述</label>
+                  <textarea id="voicePrompt" name="voice_prompt" rows="3" placeholder="留空使用自动风格"></textarea>
+                </div>
+
+                <div class="section-title wide">时间参数</div>
+
+                <div class="field" data-timing-panel="two-speaker">
+                  <label for="pauseDuration">停顿</label>
+                  <input id="pauseDuration" name="pause_duration" type="text" value="0.2" />
+                </div>
+
+                <div class="field" data-timing-panel="single">
+                  <label for="maxTailSilence">尾部静音</label>
+                  <input id="maxTailSilence" name="max_tail_silence" type="text" value="0.6" />
+                </div>
+
+                <div class="field" data-timing-panel="two-speaker">
+                  <label for="maxTurnTailSilence">轮次尾静音</label>
+                  <input id="maxTurnTailSilence" name="max_turn_tail_silence" type="text" value="0.4" />
+                </div>
+
+                <div class="field">
+                  <label for="charsPerSecond">每秒字数</label>
+                  <input id="charsPerSecond" name="target_chars_per_second" type="text" value="10" />
+                </div>
+
+                <div class="field">
+                  <label for="chunkDuration">分块秒数</label>
+                  <input id="chunkDuration" name="chunk_duration" type="text" value="60" />
+                </div>
+
+                <div class="field">
+                  <label for="minAtempo">最低变速</label>
+                  <input id="minAtempo" name="min_atempo_factor" type="text" value="0.55" />
+                </div>
+              </div>
+            </details>
+          </form>
+
+          <aside class="panel analysis-panel">
+            <div class="panel-heading">
+              <h2>分析</h2>
+              <span id="analysisBadge">空闲</span>
+            </div>
+            <dl class="kv">
+              <div><dt>类型</dt><dd id="detectedType">-</dd></div>
+              <div><dt>模式</dt><dd id="detectedMode">-</dd></div>
+              <div><dt>声线</dt><dd id="detectedVoice">-</dd></div>
+              <div><dt>置信度</dt><dd id="detectedConfidence">-</dd></div>
+            </dl>
+            <p class="reason" id="detectedReason"></p>
+          </aside>
+        </section>
+
+        <section class="panel run-panel">
+          <div class="panel-heading">
+            <h2>运行</h2>
+            <span id="runState">空闲</span>
+          </div>
+          <div class="run-meta">
+            <span id="jobId">任务: -</span>
+            <span id="jobDir">目录: -</span>
+            <span id="outputPath">输出: -</span>
+          </div>
+          <div class="result-actions is-hidden" id="resultLinks">
+            <a id="videoLink" href="#" target="_blank" rel="noreferrer">视频</a>
+            <a id="srtLink" href="#" download>中文字幕 SRT</a>
+            <a id="vttLink" href="#" download>中文字幕 VTT</a>
+          </div>
+          <pre id="logTail" class="is-hidden"></pre>
+          <video id="videoPreview" controls></video>
+        </section>
+      </section>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

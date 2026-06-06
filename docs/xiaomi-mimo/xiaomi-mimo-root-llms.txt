@@ -1,0 +1,109 @@
+﻿# Xiaomi MiMo API Open Platform
+
+> Xiaomi MiMo API Open Platform provides high-performance inference services for Xiaomi's AI models, compatible with OpenAI and Anthropic API formats.
+
+This platform offers comprehensive API documentation, integration guides, and detailed update logs for Xiaomi-related AI models. It is designed to empower developers to build and deploy next-generation intelligent applications and agents with ease.
+
+## Quick Start
+
+- [First API Call](https://platform.xiaomimimo.com/static/docs/quick-start/first-api-call.md)
+- [Model and Rate Limits](https://platform.xiaomimimo.com/static/docs/quick-start/model.md)
+- [Model Hyperparameters](https://platform.xiaomimimo.com/static/docs/quick-start/model-hyperparameters.md)
+- [Error Codes](https://platform.xiaomimimo.com/static/docs/quick-start/error-codes.md)
+
+## Pricing
+
+- [Pay‑As‑You‑Go API](https://platform.xiaomimimo.com/static/docs/price/pay-as-you-go.md)
+### Token Plan
+
+- [Subscription Instructions](https://platform.xiaomimimo.com/static/docs/price/tokenplan/subscription.md)
+- [Quick Access](https://platform.xiaomimimo.com/static/docs/price/tokenplan/quick-access.md)
+
+## News
+
+- [Xiaomi MiMo Orbit’s first batch of Agent ecosystem co-building partners announced](https://platform.xiaomimimo.com/static/docs/news/v2.5-orbit.md)
+- [MiMo-V2.5 Series Price Adjustment Announcement | 100 Trillion Token Creator Incentive Plan Concludes](https://platform.xiaomimimo.com/static/docs/news/v2.5-price-update.md)
+- [Xiaomi MiMo-V2.5 series open-sourced & Orbit 100 trillion token plan launched](https://platform.xiaomimimo.com/static/docs/news/v2.5-open-sourced.md)
+### Previous News
+
+- [Xiaomi MiMo-V2.5-TTS-Series + ASR Officially Launched: Your Voice, Under Your Control](https://platform.xiaomimimo.com/static/docs/news/previous-news/v2.5-tts-release.md)
+- [Xiaomi MiMo-V2.5 Series Large Model Launches Public Beta](https://platform.xiaomimimo.com/static/docs/news/previous-news/v2.5-news.md)
+- [Xiaomi MiMo is now integrated with the top-tier Agent framework Hermes Agent and offers a two-week free trial](https://platform.xiaomimimo.com/static/docs/news/previous-news/hermes-free.md)
+- [Xiaomi MiMo Token Plan Brand New Release](https://platform.xiaomimimo.com/static/docs/news/previous-news/token-plan-release.md)
+- [Xiaomi MiMo Agent Framework Call Free Trial Extension for One Week](https://platform.xiaomimimo.com/static/docs/news/previous-news/free-trial-extension.md)
+- [Xiaomi MiMo Partners with Top Agent Framework : First Week Free](https://platform.xiaomimimo.com/static/docs/news/previous-news/first-week-free.md)
+- [Xiaomi MiMo-V2-Pro: Flagship Foundation Model towards Agent Era](https://platform.xiaomimimo.com/static/docs/news/previous-news/v2-pro-release.md)
+- [Xiaomi MiMo-V2-Omni: Omni-Modal Agentic Foundation Model that Sees, Understands and Acts](https://platform.xiaomimimo.com/static/docs/news/previous-news/v2-omni-release.md)
+- [Xiaomi MiMo-V2-TTS: Versatile Voice Agent that Speaks and Sings](https://platform.xiaomimimo.com/static/docs/news/previous-news/v2-tts-release.md)
+- [MiMo-V2-Flash Release Note 2026/03/03](https://platform.xiaomimimo.com/static/docs/news/previous-news/news20260303.md)
+- [MiMo-V2-Flash Release Note 2026/02/04](https://platform.xiaomimimo.com/static/docs/news/previous-news/news20260212.md)
+- [Billing for Xiaomi MiMo API Open Platform is Launching Soon](https://platform.xiaomimimo.com/static/docs/news/previous-news/billing.md)
+- [Xiaomi MiMo API Open Platform Recharge Function Officially Launched](https://platform.xiaomimimo.com/static/docs/news/previous-news/recharge.md)
+- [MiMo-V2-Flash Release Note 2026/01/12](https://platform.xiaomimimo.com/static/docs/news/previous-news/news20260112.md)
+- [MiMo Public Beta Free Access Extended](https://platform.xiaomimimo.com/static/docs/news/previous-news/beta-free.md)
+- [MiMo-V2-Flash Release 2025/12/16](https://platform.xiaomimimo.com/static/docs/news/previous-news/news20251216.md)
+
+## API Reference
+
+### Chat
+
+- [OpenAI API](https://platform.xiaomimimo.com/static/docs/api/chat/openai-api.md)
+- [Anthropic API](https://platform.xiaomimimo.com/static/docs/api/chat/anthropic-api.md)
+
+### Audio
+
+- [Speech Recognition (MiMo‑V2.5-ASR) - OpenAI API Compatibility](https://platform.xiaomimimo.com/static/docs/api/audio/Speech-Recognition.md)
+
+## Integration Extension
+
+- [Overview of AI Tools](https://platform.xiaomimimo.com/static/docs/integration/tools-overview.md)
+- [OpenCode Configuration](https://platform.xiaomimimo.com/static/docs/integration/opencode.md)
+- [Claude Code Configuration](https://platform.xiaomimimo.com/static/docs/integration/claudecode.md)
+- [OpenClaw Configuration](https://platform.xiaomimimo.com/static/docs/integration/openclaw.md)
+- [Hermes Agent Configuration](https://platform.xiaomimimo.com/static/docs/integration/hermes-agent.md)
+- [Kilo Code Configuration](https://platform.xiaomimimo.com/static/docs/integration/kilocode.md)
+- [Cherry Studio Configuration](https://platform.xiaomimimo.com/static/docs/integration/cherrystudio.md)
+- [Qwen Code Configuration](https://platform.xiaomimimo.com/static/docs/integration/qwencode.md)
+- [CodeBuddy Configuration](https://platform.xiaomimimo.com/static/docs/integration/codebuddy.md)
+- [Cline Configuration](https://platform.xiaomimimo.com/static/docs/integration/cline.md)
+
+## Usage Guide
+
+### Tool Calling
+
+- [Web Search](https://platform.xiaomimimo.com/static/docs/usage-guide/tool-calling/web-search.md)
+
+### Multimodal Understanding
+
+- [Image Understanding](https://platform.xiaomimimo.com/static/docs/usage-guide/multimodal-understanding/image-understanding.md)
+- [Audio Understanding](https://platform.xiaomimimo.com/static/docs/usage-guide/multimodal-understanding/audio-understanding.md)
+- [Video Understanding](https://platform.xiaomimimo.com/static/docs/usage-guide/multimodal-understanding/video-understanding.md)
+
+- [Speech Recognition（MiMo-V2.5-ASR）](https://platform.xiaomimimo.com/static/docs/usage-guide/Speech-Recognition.md)
+- [Speech Synthesis (MiMo-V2.5-TTS Series)](https://platform.xiaomimimo.com/static/docs/usage-guide/speech-synthesis-v2.5.md)
+- [Speech Synthesis (MiMo-V2-TTS)](https://platform.xiaomimimo.com/static/docs/usage-guide/speech-synthesis.md)
+- [[Important Notice]Passing Back reasoning_content in Multi-Turn Conversations for Agent Products](https://platform.xiaomimimo.com/static/docs/usage-guide/passing-back-reasoning_content.md)
+
+## Promotions
+
+- [Refer & earn](https://platform.xiaomimimo.com/static/docs/promotions/refer.md)
+
+## FAQ
+
+- [FAQ](https://platform.xiaomimimo.com/static/docs/faq.md)
+
+## Update Log
+
+- [Model Release](https://platform.xiaomimimo.com/static/docs/updates/model.md)
+- [Model Deprecation](https://platform.xiaomimimo.com/static/docs/updates/deprecate.md)
+- [Feature Updates](https://platform.xiaomimimo.com/static/docs/updates/feature.md)
+
+## Terms & Agreements
+
+- [Service Agreement](https://platform.xiaomimimo.com/static/docs/terms/user-agreement.md)
+- [Privacy Policy](https://platform.xiaomimimo.com/static/docs/terms/privacy-policy.md)
+
+
+## Optional
+
+- [Full Documentation](https://platform.xiaomimimo.com/llms-full.txt): A single file containing all the documentation listed above.

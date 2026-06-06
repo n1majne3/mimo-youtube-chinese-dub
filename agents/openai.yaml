@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mimo YouTube Chinese Dub"
+  short_description: "Redub YouTube videos into Chinese with Mimo"
+  default_prompt: "Use $mimo-youtube-chinese-dub to redub this YouTube URL into Chinese with Xiaomi Mimo."
