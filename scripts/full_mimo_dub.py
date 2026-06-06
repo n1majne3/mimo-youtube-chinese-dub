@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import base64
 import concurrent.futures
+import contextlib
+import fcntl
 import json
 import math
 import os
@@ -14,6 +16,7 @@ import socket
 import ssl
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -55,6 +58,24 @@ def write_json(path: Path, payload: Any) -> None:
 
 def read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+@contextlib.contextmanager
+def file_lock(path: Path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def atomic_write_bytes(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp_path.write_bytes(data)
+    tmp_path.replace(path)
 
 
 def load_env_file(path: Path) -> None:
@@ -481,11 +502,14 @@ def write_tts_response(
 ) -> None:
     response = mimo_post(payload, api_key=api_key, base_url=base_url)
     write_json(raw_path, response)
-    wav_path.parent.mkdir(parents=True, exist_ok=True)
-    wav_path.write_bytes(message_audio_bytes(response))
+    atomic_write_bytes(wav_path, message_audio_bytes(response))
 
 
 def concat_wavs(inputs: list[Path], output: Path) -> None:
+    missing = [path for path in inputs if not path.exists() or path.stat().st_size <= 1024]
+    if missing:
+        missing_list = ", ".join(str(path) for path in missing[:5])
+        raise RuntimeError(f"Missing or invalid TTS split parts before concat: {missing_list}")
     concat_file = output.with_suffix(".concat.txt")
     concat_file.parent.mkdir(parents=True, exist_ok=True)
     concat_file.write_text("".join(f"file {shell_quote(str(path))}\n" for path in inputs), encoding="utf-8")
@@ -493,6 +517,30 @@ def concat_wavs(inputs: list[Path], output: Path) -> None:
 
 
 def synthesize_chunk(
+    text_zh: str,
+    raw_path: Path,
+    wav_path: Path,
+    *,
+    api_key: str,
+    base_url: str,
+    voice_strategy: str,
+    voice_prompt: str,
+    voice_sample_data_url: str | None,
+) -> None:
+    with file_lock(wav_path.with_suffix(wav_path.suffix + ".lock")):
+        return synthesize_chunk_locked(
+            text_zh,
+            raw_path,
+            wav_path,
+            api_key=api_key,
+            base_url=base_url,
+            voice_strategy=voice_strategy,
+            voice_prompt=voice_prompt,
+            voice_sample_data_url=voice_sample_data_url,
+        )
+
+
+def synthesize_chunk_locked(
     text_zh: str,
     raw_path: Path,
     wav_path: Path,
@@ -979,6 +1027,7 @@ def process(args: argparse.Namespace) -> None:
                 )
             )
     else:
+        failed_rows: list[tuple[str, BaseException]] = []
         with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
             futures = {
                 executor.submit(
@@ -994,7 +1043,26 @@ def process(args: argparse.Namespace) -> None:
                 for row in segment_rows
             }
             for future in concurrent.futures.as_completed(futures):
-                update_completed_row(future.result())
+                cid = futures[future]
+                try:
+                    update_completed_row(future.result())
+                except Exception as exc:
+                    print(f"  [{cid}] TTS worker failed; will retry serially after other workers finish: {exc}", flush=True)
+                    failed_rows.append((cid, exc))
+        for cid, _exc in failed_rows:
+            row = next(row for row in segment_rows if str(row["id"]) == cid)
+            print(f"  [{cid}] Retrying TTS+fit serially", flush=True)
+            update_completed_row(
+                synthesize_and_fit_segment(
+                    row,
+                    chunk_by_id[cid],
+                    job_dir,
+                    args,
+                    api_key=api_key,
+                    base_url=base_url,
+                    voice_sample_data_url=voice_sample_data_url,
+                )
+            )
 
     output = Path(args.output).expanduser().resolve() if args.output else job_dir / "output" / "full_chinese_dub.mp4"
     assemble(job_dir, source, chunks, output)

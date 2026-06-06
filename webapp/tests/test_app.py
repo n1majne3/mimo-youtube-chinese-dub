@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -155,13 +156,41 @@ class WebAppTests(unittest.TestCase):
                 dry_run=True,
             )
             (record.job_dir / "webapp.log").write_text("line1\nline2\n", encoding="utf-8")
+            (record.job_dir / "run.log").write_text("run1\nrun2\n", encoding="utf-8")
             (record.job_dir / "run.exit").write_text("0\n", encoding="utf-8")
 
             status = manager.status(record.job_id)
 
             self.assertEqual(status["status"], "complete")
             self.assertEqual(status["exit_code"], 0)
-            self.assertIn("line2", status["log_tail"])
+            self.assertIn("任务已完成", status["log_tail"])
+            self.assertIn("run2", status["log_tail"])
+
+    def test_complete_status_does_not_lead_with_old_webapp_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manager = app.JobManager(Path(tmp))
+            record = manager.create_record(
+                {
+                    "url": "https://www.youtube.com/watch?v=abc",
+                    "job_dir": str(Path(tmp) / "job"),
+                    "scope": "test",
+                },
+                dry_run=True,
+            )
+            (record.job_dir / "webapp.log").write_text("Dub command failed with exit code 1.\n", encoding="utf-8")
+            (record.job_dir / "run.log").write_text("Traceback from old run\nffprobe/ffmpeg decode checks passed.\n", encoding="utf-8")
+            (record.job_dir / "run.exit").write_text("0\n", encoding="utf-8")
+
+            status = manager.status(record.job_id)
+
+            self.assertEqual(status["status"], "complete")
+            self.assertTrue(status["log_tail"].startswith("任务已完成"))
+            self.assertNotIn("Dub command failed", status["log_tail"])
+
+    def test_is_process_alive_rejects_zombie_process(self):
+        completed = subprocess.CompletedProcess(["ps"], 0, stdout="Z+\n", stderr="")
+        with patch("app.os.kill"), patch("app.subprocess.run", return_value=completed):
+            self.assertFalse(app.is_process_alive(12345))
 
     def test_status_marks_stale_running_record_failed(self):
         with tempfile.TemporaryDirectory() as tmp, patch("app.is_process_alive", return_value=False):
@@ -185,6 +214,24 @@ class WebAppTests(unittest.TestCase):
             self.assertEqual(status["status"], "failed")
             saved = json.loads((record.job_dir / "webapp_job.json").read_text(encoding="utf-8"))
             self.assertEqual(saved["status"], "failed")
+
+    def test_start_blocks_when_same_job_dir_is_already_running(self):
+        with tempfile.TemporaryDirectory() as tmp, patch("app.is_process_alive", return_value=True):
+            root = Path(tmp) / "records"
+            manager = app.JobManager(root)
+            payload = {
+                "url": "https://www.youtube.com/watch?v=abc",
+                "job_dir": str(Path(tmp) / "job"),
+                "scope": "test",
+            }
+            record = manager.create_record(payload, dry_run=True)
+            record.status = "running"
+            record.pid = 12345
+            manager._write_record(record)
+            fresh_manager = app.JobManager(root)
+
+            with self.assertRaisesRegex(ValueError, "已有运行中的任务"):
+                fresh_manager.start(payload, dry_run=True)
 
     def test_generates_srt_and_vtt_from_single_speaker_segments(self):
         with tempfile.TemporaryDirectory() as tmp:

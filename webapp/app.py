@@ -235,11 +235,26 @@ def is_process_alive(pid: int | None) -> bool:
     if not pid:
         return False
     try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return False
+    try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
     except PermissionError:
         return True
+    try:
+        stat = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "stat="],
+            check=False,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except OSError:
+        return True
+    if stat.startswith("Z"):
+        return False
     return True
 
 
@@ -336,6 +351,17 @@ def tail(path: Path, lines: int = 120) -> str:
         return ""
     rows = path.read_text(encoding="utf-8", errors="replace").splitlines()
     return "\n".join(rows[-lines:])
+
+
+def job_log_tail(job_dir: Path, status: str, exit_code: int | None) -> str:
+    run_tail = tail(job_dir / "run.log", 80)
+    web_tail = tail(job_dir / "webapp.log", 80)
+    if status == "complete":
+        header = f"任务已完成，exit code {exit_code}。"
+        if "Traceback" in run_tail or "Dub command failed" in web_tail:
+            header += " 下方若出现 Traceback，是恢复前的历史失败日志；最终状态以完成标记为准。"
+        return "\n".join(part for part in [header, run_tail] if part)
+    return "\n".join(filter(None, [web_tail, run_tail]))
 
 
 def safe_float(value: Any, default: float = 0.0) -> float:
@@ -620,6 +646,10 @@ class JobManager:
         return record
 
     def start(self, payload: dict[str, Any], *, dry_run: bool = False) -> JobRecord:
+        job_dir = resolve_local_path(payload.get("job_dir") or default_job_dir(str(payload.get("url") or "")))
+        active_record = self._active_record_for_job_dir(job_dir)
+        if active_record:
+            raise ValueError(f"任务目录已有运行中的任务: {active_record.job_id} (pid {active_record.pid})")
         api_settings = resolve_api_settings(payload, require_key=not dry_run)
         record = self.create_record(payload, dry_run=dry_run)
         log_path = record.job_dir / "webapp.log"
@@ -682,7 +712,7 @@ class JobManager:
             "pid": record.pid,
             "job_dir": str(record.job_dir),
             "command": record.command,
-            "log_tail": "\n".join(filter(None, [tail(record.job_dir / "webapp.log", 80), tail(record.job_dir / "run.log", 80)])),
+            "log_tail": job_log_tail(record.job_dir, status, exit_code),
             "output": str(output) if output else None,
             "video_url": f"/api/jobs/{record.job_id}/video" if output else None,
             "video_mtime": output.stat().st_mtime if output else None,
@@ -739,6 +769,27 @@ class JobManager:
                 self.records[job_id] = record
                 return record
         return None
+
+    def _active_record_for_job_dir(self, job_dir: Path) -> JobRecord | None:
+        record_path = job_dir / "webapp_job.json"
+        if not record_path.exists():
+            return None
+        try:
+            payload = json.loads(record_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+        status = str(payload.get("status") or "")
+        pid = payload.get("pid")
+        if status != "running" or not is_process_alive(pid):
+            return None
+        return JobRecord(
+            job_id=str(payload.get("job_id") or ""),
+            job_dir=Path(str(payload.get("job_dir") or job_dir)),
+            payload=dict(payload.get("payload") or {}),
+            command=list(payload.get("command") or []),
+            status=status,
+            pid=pid,
+        )
 
 
 MANAGER = JobManager(JOB_ROOT)

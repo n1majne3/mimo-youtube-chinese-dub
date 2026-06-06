@@ -29,6 +29,14 @@ class FullMimoDubTests(unittest.TestCase):
 
         self.assertEqual(args.tts_workers, 3)
 
+    def test_concat_wavs_reports_missing_split_parts(self):
+        module = load_full_mimo()
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "missing.wav"
+
+            with self.assertRaisesRegex(RuntimeError, "Missing or invalid TTS split parts"):
+                module.concat_wavs([missing], Path(tmp) / "out.wav")
+
     def test_build_job_adds_chunks_to_prepare_manifest(self):
         module = load_full_mimo()
         with tempfile.TemporaryDirectory() as tmp:
