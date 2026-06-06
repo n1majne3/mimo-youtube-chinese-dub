@@ -231,6 +231,18 @@ def process_env_for_api(settings: ApiSettings) -> dict[str, str]:
     return env
 
 
+def is_process_alive(pid: int | None) -> bool:
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def build_wizard_command(payload: dict[str, Any], *, dry_run: bool = False) -> list[str]:
     url = str(payload.get("url") or "").strip()
     if not url:
@@ -650,7 +662,12 @@ class JobManager:
             if poll is not None:
                 exit_code = poll
         if exit_code is None:
-            status = "running" if process else record.status
+            if process or (record.status == "running" and is_process_alive(record.pid)):
+                status = "running"
+            elif record.status == "running":
+                status = "failed"
+            else:
+                status = record.status
         else:
             status = "complete" if exit_code == 0 else "failed"
         record.status = status

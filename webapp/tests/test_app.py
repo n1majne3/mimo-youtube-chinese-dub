@@ -163,6 +163,29 @@ class WebAppTests(unittest.TestCase):
             self.assertEqual(status["exit_code"], 0)
             self.assertIn("line2", status["log_tail"])
 
+    def test_status_marks_stale_running_record_failed(self):
+        with tempfile.TemporaryDirectory() as tmp, patch("app.is_process_alive", return_value=False):
+            root = Path(tmp) / "records"
+            manager = app.JobManager(root)
+            record = manager.create_record(
+                {
+                    "url": "https://www.youtube.com/watch?v=abc",
+                    "job_dir": str(Path(tmp) / "job"),
+                    "scope": "test",
+                },
+                dry_run=True,
+            )
+            record.status = "running"
+            record.pid = 12345
+            manager._write_record(record)
+            fresh_manager = app.JobManager(root)
+
+            status = fresh_manager.status(record.job_id)
+
+            self.assertEqual(status["status"], "failed")
+            saved = json.loads((record.job_dir / "webapp_job.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved["status"], "failed")
+
     def test_generates_srt_and_vtt_from_single_speaker_segments(self):
         with tempfile.TemporaryDirectory() as tmp:
             job_dir = Path(tmp) / "job"
